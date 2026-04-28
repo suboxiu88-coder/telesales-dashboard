@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>电销数据看板</title>
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+  <style>
+    :root {
+      --bg: #f3f7fb;
+      --bg-accent: #eaf2ff;
+      --panel: rgba(255, 255, 255, 0.88);
+      --panel-2: rgba(246, 249, 255, 0.95);
+      --text: #122033;
+      --muted: #5f7390;
+      --line: rgba(76, 101, 143, 0.16);
+      --accent: #3b82f6;
+      --accent-soft: rgba(59,130,246,.12);
+      --accent2: #7c3aed;
+      --good: #22c55e;
+      --warn: #f59e0b;
+      --bad: #ef4444;
+      --shadow: 0 22px 60px rgba(39, 76, 119, 0.12);
+      --radius: 22px;
+    }
+    body.dark {
+      --bg: #0b1020;
+      --bg-accent: #111a30;
+      --panel: rgba(15, 23, 42, 0.82);
+      --panel-2: rgba(20, 31, 56, 0.92);
+      --text: #e6eefc;
+      --muted: #8ea4c8;
+      --line: rgba(148,163,184,.18);
+      --accent: #6ee7ff;
+      --accent-soft: rgba(110,231,255,.10);
+      --accent2: #7c3aed;
+      --shadow: 0 18px 60px rgba(2,6,23,.45);
+    }
+    *{box-sizing:border-box}
+    body {
+      margin: 0; font-family: "PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 12% 8%, rgba(59,130,246,.12), transparent 24%),
+        radial-gradient(circle at 88% 12%, rgba(124,58,237,.10), transparent 26%),
+        linear-gradient(180deg, var(--bg) 0%, var(--bg-accent) 100%);
+      transition: background .25s ease, color .25s ease;
+    }
+    .shell{max-width:1600px;margin:0 auto;padding:28px}
+    .hero{display:flex;justify-content:space-between;gap:24px;align-items:flex-start;margin-bottom:24px}
+    .hero-title-wrap{display:flex;flex-direction:column;gap:10px}
+    .hero-kicker{font-size:12px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--accent)}
+    .hero-title{font-size:44px;line-height:1.05;font-weight:900;letter-spacing:-.04em;margin:0;color:var(--text)}
+    .hero-sub{font-size:14px;color:var(--muted);max-width:680px;margin:0}
+    .pill{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line);padding:8px 12px;border-radius:999px;background:rgba(255,255,255,.36);color:var(--text);font-size:12px;backdrop-filter:blur(10px)}
+    body.dark .pill{background:rgba(255,255,255,.03);color:#c7d5ee}
+    .hero-actions{display:flex;gap:10px;align-items:center}
+    .theme-toggle{height:40px;padding:0 14px;border-radius:999px;border:1px solid var(--line);background:linear-gradient(135deg, rgba(59,130,246,.14), rgba(124,58,237,.12));color:var(--text);cursor:pointer;font-weight:600}
+    .theme-badge{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;font-size:11px;font-weight:700;border:1px solid transparent;margin-top:8px}
+    .theme-badge.good{color:#991b1b;background:rgba(239,68,68,.14);border-color:rgba(239,68,68,.24)}
+    .theme-badge.warn{color:#92400e;background:rgba(245,158,11,.16);border-color:rgba(245,158,11,.28)}
+    .theme-badge.bad{color:#166534;background:rgba(34,197,94,.14);border-color:rgba(34,197,94,.24)}
+    .theme-badge.critical{color:#ffffff;background:linear-gradient(135deg,#ef4444,#b91c1c);border-color:#991b1b;box-shadow:0 10px 24px rgba(239,68,68,.28)}
+    body.dark .theme-badge.good{color:#fca5a5;background:rgba(239,68,68,.16);border-color:rgba(239,68,68,.26)}
+    body.dark .theme-badge.warn{color:#fcd34d;background:rgba(245,158,11,.16);border-color:rgba(245,158,11,.28)}
+    body.dark .theme-badge.bad{color:#86efac;background:rgba(34,197,94,.16);border-color:rgba(34,197,94,.26)}
+    body.dark .theme-badge.critical{color:#ffffff;background:linear-gradient(135deg,#ef4444,#991b1b);border-color:#f87171;box-shadow:0 12px 28px rgba(239,68,68,.34)}
+    .grid{display:grid;gap:18px}
+    .kpis{grid-template-columns:repeat(5,minmax(0,1fr));margin-bottom:18px}
+    .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);backdrop-filter:blur(12px);transition:background .25s ease,border-color .25s ease}
+    .kpi{padding:18px 18px 16px}
+    .label{font-size:12px;color:var(--muted);margin-bottom:12px}
+    .value{font-size:32px;font-weight:800;letter-spacing:-.02em}
+    .sub{margin-top:8px;font-size:12px;color:var(--muted)}
+    .toolbar{display:grid;grid-template-columns:1.2fr 1fr 1fr 1fr 1fr auto;gap:12px;padding:16px;margin-bottom:18px}
+    .control{display:flex;flex-direction:column;gap:6px}
+    .control label{font-size:12px;color:var(--muted)}
+    .control input,.control select{height:42px;border-radius:12px;border:1px solid var(--line);background:var(--panel-2);color:var(--text);padding:0 12px;outline:none}
+    .btns{display:flex;gap:10px;align-items:end}
+    button{height:42px;padding:0 16px;border-radius:12px;border:1px solid var(--line);background:linear-gradient(135deg, rgba(59,130,246,.16), rgba(124,58,237,.12));color:var(--text);cursor:pointer}
+    .layout{grid-template-columns:1.2fr 1fr;align-items:stretch}
+    .panel{padding:18px}
+    .panel h3{margin:0 0 4px;font-size:18px}
+    .panel .desc{margin:0 0 14px;color:var(--muted);font-size:12px}
+    .chart{height:340px}
+    .chart.tall{height:420px}
+    .twocol{grid-template-columns:1fr 1fr;margin-top:18px}
+    .alerts{display:grid;gap:10px}
+    .alert{padding:14px 14px;border-radius:16px;border:1px solid var(--line);background:rgba(255,255,255,.32)}
+    body.dark .alert{background:rgba(255,255,255,.03)}
+    .alert.bad{border-color:rgba(239,68,68,.3);background:rgba(254,226,226,.7)}
+    .alert.warn{border-color:rgba(245,158,11,.3);background:rgba(254,243,199,.75)}
+    .alert.good{border-color:rgba(34,197,94,.3);background:rgba(220,252,231,.75)}
+    body.dark .alert.bad{background:rgba(127,29,29,.18)}
+    body.dark .alert.warn{background:rgba(120,53,15,.18)}
+    body.dark .alert.good{background:rgba(20,83,45,.18)}
+    .tag{display:inline-block;padding:4px 8px;border-radius:999px;font-size:11px;background:rgba(255,255,255,.45);margin-bottom:8px}
+    body.dark .tag{background:rgba(255,255,255,.08)}
+    table{width:100%;border-collapse:collapse;font-size:12px}
+    th,td{padding:10px 8px;border-bottom:1px solid var(--line);text-align:left}
+    th{color:var(--muted);font-weight:600}
+    .tabs{display:flex;gap:10px;margin-bottom:18px}
+    .tab{padding:10px 14px;border-radius:999px;border:1px solid var(--line);cursor:pointer;color:var(--muted);background:rgba(255,255,255,.28)}
+    body.dark .tab{background:transparent}
+    .tab.active{background:linear-gradient(135deg, rgba(59,130,246,.22), rgba(124,58,237,.18));color:var(--text);font-weight:700}
+    .view{display:none}.view.active{display:block}
+    @media (max-width: 1200px){.kpis{grid-template-columns:repeat(2,1fr)}.layout,.twocol,.toolbar{grid-template-columns:1fr}.btns{align-items:stretch}.hero{flex-direction:column}.hero-title{font-size:36px}}
+  </style>
+</head>
+<body>
+<div class="shell">
+  <div class="hero">
+    <div class="hero-title-wrap">
+      <h1 class="hero-title">电销数据看板</h1>
+    </div>
+    <div class="hero-actions">
+      <button class="theme-toggle" id="themeToggle">切换亮/暗主题</button>
+      <div class="pill" id="summaryPill">数据加载中…</div>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <div class="tab active" data-tab="summary">首页 · 管理层汇报</div>
+    <div class="tab" data-tab="ops">二级页 · 过程复盘</div>
+  </div>
+
+  <div class="card toolbar">
+    <div class="control"><label>日期范围</label><select id="period"><option value="day">单日</option><option value="week">周</option><option value="month" selected>月</option></select></div>
+    <div class="control"><label>部门</label><select id="department"></select></div>
+    <div class="control"><label>项目（多选简化为单项目/全部）</label><select id="project"></select></div>
+    <div class="control"><label>坐席姓名</label><select id="agent"></select></div>
+    <div class="control"><label>坐席搜索</label><input id="agentSearch" placeholder="输入姓名关键字" /></div>
+    <div class="btns"><button id="resetBtn">重置筛选</button></div>
+  </div>
+
+  <div class="view active" id="summary-view">
+    <div class="grid kpis">
+      <div class="card kpi"><div class="label">综合任务达成率</div><div class="value" id="kpiTaskRate">0%</div><div class="sub" id="kpiTaskSub"></div><div class="sub" id="kpiTaskTrend"></div></div>
+      <div class="card kpi"><div class="label">总拨打次数</div><div class="value" id="kpiDial">0</div><div class="sub" id="kpiDialSub"></div><div class="sub" id="kpiDialTrend"></div></div>
+      <div class="card kpi"><div class="label">有效接通率</div><div class="value" id="kpiConnectRate">0%</div><div class="sub" id="kpiConnectSub"></div><div class="sub" id="kpiConnectTrend"></div></div>
+      <div class="card kpi"><div class="label">申请转化量</div><div class="value" id="kpiApply">0</div><div class="sub" id="kpiApplySub"></div><div class="sub" id="kpiApplyTrend"></div></div>
+      <div class="card kpi"><div class="label">放款量</div><div class="value" id="kpiLoan">0</div><div class="sub" id="kpiLoanSub"></div><div class="sub" id="kpiLoanTrend"></div></div>
+    </div>
+
+    <div class="grid layout">
+      <div class="card panel"><h3>全链路转化漏斗</h3><p class="desc">拨打 → 接通 → 意向 → 申请 → 放款，体现销售线索转化效率</p><div class="chart tall" id="funnelChart"></div></div>
+      <div class="card panel"><h3>月度目标达成看板</h3><p class="desc">当前优先显示任务达成与目标补录提示；补齐月度指标后自动升级为月度目标追踪</p><div class="chart tall" id="targetChart"></div></div>
+    </div>
+
+    <div class="grid twocol">
+      <div class="card panel"><h3>按日趋势图</h3><p class="desc">观察拨打、接通、申请与任务完成的日维度走势</p><div class="chart" id="trendChart"></div></div>
+      <div class="card panel"><h3>异常预警</h3><p class="desc">自动识别低接通、低达成、高失败等风险点</p><div class="alerts" id="alerts"></div></div>
+    </div>
+  </div>
+
+  <div class="view" id="ops-view">
+    <div class="grid layout">
+      <div class="card panel"><h3>项目 / 坐席效率分布</h3><p class="desc">横轴接通率，纵轴任务达成率，气泡大小代表拨打量</p><div class="chart tall" id="scatterChart"></div></div>
+      <div class="card panel"><h3>坐席过程明细</h3><p class="desc">供主管快速定位高效率与低效率坐席</p><div id="detailTable"></div></div>
+    </div>
+  </div>
+</div>
+<script>
+let RAW=[];
+const $=id=>document.getElementById(id);
+const state={period:'month',department:'全部',project:'全部',agent:'全部',search:'',theme:'light'};
+async function init(){
+  RAW = await fetch('./data.json').then(r=>r.json());
+  bindTabs();
+  populateFilters();
+  bindControls();
+  bindTheme();
+  render();
+}
+function bindTabs(){
+  document.querySelectorAll('.tab').forEach(tab=>tab.onclick=()=>{
+    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+    document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+    tab.classList.add('active');
+    $(tab.dataset.tab+'-view').classList.add('active');
+    setTimeout(()=>window.dispatchEvent(new Event('resize')),100);
+  });
+}
+function uniq(arr){return ['全部',...Array.from(new Set(arr.filter(Boolean)))]}
+function populateFilters(){
+  fillSelect('department', uniq(RAW.map(d=>d.department)));
+  fillSelect('project', uniq(RAW.map(d=>d.project)));
+  fillSelect('agent', uniq(RAW.map(d=>d.agent)));
+}
+function fillSelect(id, items){ const el=$(id); el.innerHTML=items.map(v=>`<option>${v}</option>`).join(''); }
+function bindControls(){
+  ['period','department','project','agent'].forEach(id=>$(id).onchange=e=>{state[id]=e.target.value; render();});
+  $('agentSearch').oninput=e=>{state.search=e.target.value.trim(); render();};
+  $('resetBtn').onclick=()=>{state.period='month';state.department='全部';state.project='全部';state.agent='全部';state.search='';$('period').value='month';$('department').value='全部';$('project').value='全部';$('agent').value='全部';$('agentSearch').value='';render();};
+}
+function bindTheme(){
+  $('themeToggle').onclick=()=>{
+    state.theme = state.theme === 'dark' ? 'light' : 'dark';
+    document.body.classList.toggle('dark', state.theme === 'dark');
+    render();
+  };
+  document.body.classList.toggle('dark', state.theme === 'dark');
+}
+function getData(){
+  return RAW.filter(d=>(state.department==='全部'||d.department===state.department)
+    && (state.project==='全部'||d.project===state.project)
+    && (state.agent==='全部'||d.agent===state.agent)
+    && (!state.search || d.agent.includes(state.search)));
+}
+function sum(arr,key){return arr.reduce((a,b)=>a+(+b[key]||0),0)}
+function pct(n,d){return d? (n/d*100):0}
+function render(){
+  const data=getData();
+  const dial=sum(data,'dial_count');
+  const connected=sum(data,'connected_count');
+  const intent=sum(data,'intent_count');
+  const apply=sum(data,'apply_count');
+  const task=sum(data,'task_count');
+  const done=sum(data,'task_done');
+  const loan=sum(data,'loan_count');
+  const failed=sum(data,'failed_count');
+  const theme = getComputedStyle(document.body);
+  $('summaryPill').textContent=`当前筛选：${data.length} 条记录 · ${uniq(data.map(d=>d.agent)).length-1} 名坐席 · ${uniq(data.map(d=>d.project)).length-1} 个项目`;
+  $('kpiTaskRate').textContent=`${pct(done,task).toFixed(1)}%`;
+  $('kpiTaskSub').textContent=`已完成 ${done} / 任务量 ${task}`;
+  $('kpiDial').textContent=dial.toLocaleString();
+  const byAgentDial = {};
+  data.forEach(d => { byAgentDial[d.agent] = (byAgentDial[d.agent] || 0) + d.dial_count; });
+  const topDial = dial ? Math.max(...Object.values(byAgentDial)) : 0;
+  const agentCount = Math.max(uniq(data.map(d=>d.agent)).length - 1, 1);
+  const avgDial = dial ? dial / agentCount : 0;
+  $('kpiDialSub').textContent=`最高坐席拨打 ${topDial.toFixed(0)} 次`;
+  $('kpiConnectRate').textContent=`${pct(connected,dial).toFixed(1)}%`;
+  $('kpiConnectSub').textContent=`有效接通 ${connected} 次`;
+  $('kpiApply').textContent=apply.toLocaleString();
+  const applyRate = pct(apply, intent);
+  $('kpiApplySub').textContent=`意向 ${intent} → 申请 ${apply}`;
+  $('kpiLoan').textContent=loan.toLocaleString();
+  $('kpiLoanSub').textContent=loan===0 ? '⚠ 当前放款为 0，需重点关注末端转化' : `失败客户 ${failed} 个`;
+  const projectCount = Math.max(uniq(data.map(d=>d.project)).length - 1, 1);
+  setTrend('kpiTaskTrend', pct(done,task), 60, '%', '目标线 60%');
+  setTrend('kpiDialTrend', topDial, avgDial, '次', `人均拨打 ${avgDial.toFixed(0)} 次`);
+  setTrend('kpiConnectTrend', pct(connected,dial), 35, '%', '建议线 35%');
+  setTrend('kpiApplyTrend', applyRate, 30, '%', '申请转化参考线 30%');
+  setTrend('kpiLoanTrend', loan, 1, '', loan===0 ? '未达最低放款线' : '达到最低放款线');
+  renderFunnel([dial,connected,intent,apply,loan], theme);
+  renderTarget(done,task,data, theme);
+  renderTrend(data, theme);
+  renderAlerts(data,dial,connected,task,done,failed);
+  renderScatter(data, theme);
+  renderTable(data);
+}
+function setTrend(id, value, benchmark, suffix='', label=''){
+  const el = $(id);
+  const diff = value - benchmark;
+  let level = 'good';
+  let icon = '▲';
+  let text = '';
+  const isDialCard = id === 'kpiDialTrend';
+  if (diff < 0) {
+    level = 'bad';
+    icon = '▼';
+    text = isDialCard
+      ? `${icon} 低于人均 ${Math.abs(diff).toFixed(0)}${suffix}`
+      : `${icon} 低于参考线 ${Math.abs(diff).toFixed(1).replace(/\.0$/,'')}${suffix}`;
+  } else {
+    level = 'good';
+    icon = '▲';
+    text = isDialCard
+      ? `${icon} 高于人均 ${Math.abs(diff).toFixed(0)}${suffix}`
+      : `${icon} 高于参考线 ${Math.abs(diff).toFixed(1).replace(/\.0$/,'')}${suffix}`;
+  }
+  if (benchmark === 1 && value === 0) {
+    level = 'critical';
+    text = '▼ 需重点关注';
+  }
+  el.innerHTML = `<span class="theme-badge ${level}">${text}</span> <span style="color:var(--muted)">${label}</span>`;
+}
+function chart(id){ return echarts.init($(id)); }
+function renderFunnel(values, theme){
+  const stages = ['拨打','接通','意向','申请','放款'];
+  const axisColor = theme.getPropertyValue('--muted').trim();
+  const lineColor = theme.getPropertyValue('--line').trim();
+  const textColor = theme.getPropertyValue('--text').trim();
+  const stageColors = values.map((v, i) => {
+    if (i === 0) return '#3b82f6';
+    const prev = values[i - 1] || 1;
+    const loss = 100 - (v / prev * 100);
+    if (i === values.length - 1 && v === 0) return '#ef4444';
+    if (loss >= 80) return '#ef4444';
+    if (loss >= 50) return '#f59e0b';
+    return '#84cc16';
+  });
+  const data = values.map((v, i) => {
+    const prev = i === 0 ? v : values[i - 1];
+    const retain = i === 0 ? 100 : (prev ? (v / prev * 100) : 0);
+    const loss = i === 0 ? 0 : (100 - retain);
+    return {
+      name: stages[i],
+      value: v,
+      retain,
+      loss,
+      itemStyle: { color: stageColors[i] }
+    };
+  });
+  const transitions = data.slice(1).map((d, idx) => ({
+    from: stages[idx],
+    to: d.name,
+    retain: d.retain,
+    loss: d.loss,
+    color: d.loss >= 80 ? '#ef4444' : d.loss >= 50 ? '#f59e0b' : '#84cc16'
+  }));
+  const loanAlert = values[4] === 0 ? [{
+    type:'text',
+    left:'center',
+    bottom:10,
+    style:{
+      text:'⚠ 放款为 0：末端转化断层，请优先排查申请后的跟进与审批衔接',
+      fill:'#ef4444',
+      font:'700 14px sans-serif'
+    }
+  }] : [];
+  const c=chart('funnelChart');
+  c.setOption({
+    backgroundColor:'transparent',
+    tooltip:{
+      trigger:'item',
+      formatter:(p)=>{
+        const d = p.data;
+        if (p.dataIndex === 0) return `${d.name}<br/>数量：${d.value}`;
+        return `${d.name}<br/>数量：${d.value}<br/>转化率：${d.retain.toFixed(1)}%<br/>流失率：${d.loss.toFixed(1)}%`;
+      }
+    },
+    series:[{
+      type:'funnel',
+      left:'8%',top:24,bottom:48,width:'60%',
+      min:0,max:Math.max(...values,1),sort:'descending',gap:8,
+      label:{show:false},
+      labelLine:{show:false},
+      itemStyle:{borderColor: theme.getPropertyValue('--panel').trim(), borderWidth:2, opacity:.92},
+      emphasis:{label:{show:false}},
+      data
+    }],
+    graphic:[
+      ...data.map((d, i)=>([
+        {type:'text', right:95, top:58 + i*64, style:{text:d.name, fill:textColor, font:'700 18px sans-serif'}},
+        {type:'text', right:24, top:58 + i*64, style:{text:`数量 ${d.value}`, fill:textColor, font:'700 18px sans-serif', textAlign:'right'}}
+      ])).flat(),
+      ...transitions.map((t, idx)=>([
+        {type:'line', right:240, top:90 + idx*64, shape:{x1:0,y1:0,x2:70,y2:0}, style:{stroke:lineColor,lineWidth:1.2}},
+        {type:'text', right:130, top:80 + idx*64, style:{text:`转化率 ${t.retain.toFixed(1)}%`, fill:axisColor, font:'12px sans-serif'}},
+        {type:'text', right:24, top:80 + idx*64, style:{text:`流失率 ${t.loss.toFixed(1)}%`, fill:t.color, font:'700 12px sans-serif', textAlign:'right'}}
+      ])).flat(),
+      ...loanAlert
+    ]
+  }, true);
+}
+function renderTarget(done,task,data, theme){
+  const hasTarget = data.some(d=>+d.monthly_target>0);
+  const c=chart('targetChart');
+  if(!hasTarget){
+    c.setOption({graphic:[
+      {type:'text',left:'center',top:'26%',style:{text:'月度指标待补录',fill:theme.getPropertyValue('--text').trim(),font:'700 28px sans-serif'}},
+      {type:'text',left:'center',top:'40%',style:{text:`当前以任务达成率 ${pct(done,task).toFixed(1)}% 作为阶段目标代理指标`,fill:theme.getPropertyValue('--muted').trim(),font:'14px sans-serif'}},
+      {type:'text',left:'center',top:'52%',style:{text:'补齐“本月月度指标”后，可自动切换为月度目标进度、缺口与预测模型',fill:theme.getPropertyValue('--muted').trim(),font:'14px sans-serif'}}
+    ]}, true);
+  } else {
+    const totalTarget=sum(data,'monthly_target');
+    c.setOption({series:[{type:'gauge',progress:{show:true,width:18},axisLine:{lineStyle:{width:18}},detail:{formatter:'{value}%',color:theme.getPropertyValue('--text').trim()},title:{color:theme.getPropertyValue('--muted').trim()},data:[{value:pct(done,totalTarget).toFixed(1),name:'月度达成'}]}]}, true);
+  }
+}
+function renderTrend(data, theme){
+  const map={};
+  data.forEach(d=>{ if(!map[d.date]) map[d.date]={dial:0,conn:0,apply:0,done:0}; map[d.date].dial+=d.dial_count; map[d.date].conn+=d.connected_count; map[d.date].apply+=d.apply_count; map[d.date].done+=d.task_done;});
+  const dates=Object.keys(map).sort();
+  const c=chart('trendChart');
+  c.setOption({tooltip:{trigger:'axis'},legend:{textStyle:{color:theme.getPropertyValue('--muted').trim()}},grid:{left:40,right:20,top:36,bottom:28},xAxis:{type:'category',data:dates,axisLabel:{color:theme.getPropertyValue('--muted').trim()}},yAxis:{type:'value',axisLabel:{color:theme.getPropertyValue('--muted').trim()},splitLine:{lineStyle:{color:theme.getPropertyValue('--line').trim()}}},series:[
+    {name:'拨打',type:'line',smooth:true,data:dates.map(d=>map[d].dial),lineStyle:{width:3,color:'#3b82f6'},itemStyle:{color:'#3b82f6'}},
+    {name:'接通',type:'line',smooth:true,data:dates.map(d=>map[d].conn),lineStyle:{width:3,color:'#84cc16'},itemStyle:{color:'#84cc16'}},
+    {name:'申请',type:'line',smooth:true,data:dates.map(d=>map[d].apply),lineStyle:{width:3,color:'#f59e0b'},itemStyle:{color:'#f59e0b'}},
+    {name:'任务完成',type:'bar',data:dates.map(d=>map[d].done),barMaxWidth:24,itemStyle:{color:'#8b5cf6',borderRadius:[8,8,0,0]}}
+  ]}, true);
+}
+function renderAlerts(data,dial,connected,task,done,failed){
+  const avgConnect=pct(connected,dial), avgTask=pct(done,task);
+  const byAgent={};
+  data.forEach(d=>{if(!byAgent[d.agent]) byAgent[d.agent]={dial:0,conn:0,task:0,done:0,failed:0}; byAgent[d.agent].dial+=d.dial_count; byAgent[d.agent].conn+=d.connected_count; byAgent[d.agent].task+=d.task_count; byAgent[d.agent].done+=d.task_done; byAgent[d.agent].failed+=d.failed_count;});
+  const alerts=[];
+  Object.entries(byAgent).forEach(([name,v])=>{
+    const cr=pct(v.conn,v.dial), tr=pct(v.done,v.task);
+    if(cr<35) alerts.push({level:'bad', tag:'低接通', text:`${name} 接通率仅 ${cr.toFixed(1)}%，低于建议线 35%`});
+    if(tr<60) alerts.push({level:'warn', tag:'低达成', text:`${name} 任务达成率 ${tr.toFixed(1)}%，建议重点跟进`});
+  });
+  if(!alerts.length) alerts.push({level:'good',tag:'状态良好',text:`当前整体接通率 ${avgConnect.toFixed(1)}%，任务达成率 ${avgTask.toFixed(1)}%，暂无明显异常`});
+  $('alerts').innerHTML=alerts.map(a=>`<div class="alert ${a.level}"><div class="tag">${a.tag}</div><div>${a.text}</div></div>`).join('');
+}
+function renderScatter(data, theme){
+  const map={};
+  data.forEach(d=>{if(!map[d.agent]) map[d.agent]={dial:0,conn:0,task:0,done:0,project:new Set()}; map[d.agent].dial+=d.dial_count; map[d.agent].conn+=d.connected_count; map[d.agent].task+=d.task_count; map[d.agent].done+=d.task_done; map[d.agent].project.add(d.project)});
+  const points=Object.entries(map).map(([name,v])=>({name,value:[pct(v.conn,v.dial).toFixed(1),pct(v.done,v.task).toFixed(1),v.dial], projects:[...v.project].join('、')}));
+  const c=chart('scatterChart');
+  c.setOption({tooltip:{formatter:(p)=>`${p.data.name}<br/>接通率：${p.value[0]}%<br/>达成率：${p.value[1]}%<br/>拨打：${p.value[2]}<br/>项目：${p.data.projects}`},xAxis:{name:'接通率 %',nameTextStyle:{color:theme.getPropertyValue('--muted').trim()},axisLabel:{color:theme.getPropertyValue('--muted').trim()},splitLine:{lineStyle:{color:theme.getPropertyValue('--line').trim()}}},yAxis:{name:'任务达成率 %',nameTextStyle:{color:theme.getPropertyValue('--muted').trim()},axisLabel:{color:theme.getPropertyValue('--muted').trim()},splitLine:{lineStyle:{color:theme.getPropertyValue('--line').trim()}}},series:[{type:'scatter',data:points,symbolSize:v=>Math.max(18,v[2]/2),label:{show:true,formatter:'{b}',position:'top',color:theme.getPropertyValue('--text').trim()},itemStyle:{color:theme.getPropertyValue('--accent').trim(),shadowBlur:18,shadowColor:'rgba(59,130,246,.25)'}}]}, true);
+}
+function renderTable(data){
+  const map={};
+  data.forEach(d=>{if(!map[d.agent]) map[d.agent]={project:new Set(),dial:0,conn:0,intent:0,apply:0,task:0,done:0,talk:0}; let v=map[d.agent]; v.project.add(d.project); v.dial+=d.dial_count; v.conn+=d.connected_count; v.intent+=d.intent_count; v.apply+=d.apply_count; v.task+=d.task_count; v.done+=d.task_done; v.talk+=d.talk_seconds;});
+  const rows=Object.entries(map).map(([name,v])=>({name,project:[...v.project].join('、'),dial:v.dial,connectRate:pct(v.conn,v.dial),taskRate:pct(v.done,v.task),apply:v.apply,talk:Math.round(v.talk/60)})).sort((a,b)=>b.taskRate-a.taskRate);
+  $('detailTable').innerHTML=`<table><thead><tr><th>坐席</th><th>项目</th><th>拨打</th><th>接通率</th><th>申请</th><th>达成率</th><th>通时(分)</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${r.name}</td><td>${r.project}</td><td>${r.dial}</td><td>${r.connectRate.toFixed(1)}%</td><td>${r.apply}</td><td>${r.taskRate.toFixed(1)}%</td><td>${r.talk}</td></tr>`).join('')}</tbody></table>`;
+}
+window.addEventListener('resize',()=>document.querySelectorAll('.chart').forEach(el=>{ try{ echarts.getInstanceByDom(el)?.resize(); }catch(e){} }));
+init();
+</script>
+</body>
+</html>
