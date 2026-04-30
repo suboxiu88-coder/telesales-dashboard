@@ -164,6 +164,44 @@
 let RAW=[];
 const $=id=>document.getElementById(id);
 const state={period:'month',department:'全部',project:'全部',agent:'全部',search:'',theme:'light'};
+
+function parseDate(value){
+  if(!value) return null;
+  const s = String(value).trim().replace(/[.\-]/g,'/');
+  const parts = s.split('/').map(Number);
+  if(parts.length !== 3 || parts.some(n=>Number.isNaN(n))) return null;
+  return new Date(parts[0], parts[1]-1, parts[2]);
+}
+function formatDateKey(date){
+  const y = date.getFullYear();
+  const m = String(date.getMonth()+1).padStart(2,'0');
+  const d = String(date.getDate()).padStart(2,'0');
+  return `${y}/${m}/${d}`;
+}
+function getWeekStart(date){
+  const day = date.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  const d = new Date(date);
+  d.setHours(0,0,0,0);
+  d.setDate(d.getDate() + diff);
+  return d;
+}
+function getLatestDate(records){
+  const dates = records.map(d=>parseDate(d.date)).filter(Boolean).sort((a,b)=>a-b);
+  return dates.length ? dates[dates.length-1] : null;
+}
+function matchesPeriod(record, period, anchorDate){
+  const current = parseDate(record.date);
+  if(!current || !anchorDate) return true;
+  if(period === 'day') return formatDateKey(current) === formatDateKey(anchorDate);
+  if(period === 'week') {
+    return formatDateKey(getWeekStart(current)) === formatDateKey(getWeekStart(anchorDate));
+  }
+  if(period === 'month') {
+    return current.getFullYear() === anchorDate.getFullYear() && current.getMonth() === anchorDate.getMonth();
+  }
+  return true;
+}
 async function init(){
   RAW = await fetch('./data.json').then(r=>r.json());
   bindTabs();
@@ -202,7 +240,9 @@ function bindTheme(){
   document.body.classList.toggle('dark', state.theme === 'dark');
 }
 function getData(){
-  return RAW.filter(d=>(state.department==='全部'||d.department===state.department)
+  const anchorDate = getLatestDate(RAW);
+  return RAW.filter(d=>matchesPeriod(d, state.period, anchorDate)
+    && (state.department==='全部'||d.department===state.department)
     && (state.project==='全部'||d.project===state.project)
     && (state.agent==='全部'||d.agent===state.agent)
     && (!state.search || d.agent.includes(state.search)));
