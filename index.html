@@ -72,7 +72,7 @@
     .label{font-size:12px;color:var(--muted);margin-bottom:12px}
     .value{font-size:32px;font-weight:800;letter-spacing:-.02em}
     .sub{margin-top:8px;font-size:12px;color:var(--muted)}
-    .toolbar{display:grid;grid-template-columns:1.2fr 1fr 1fr 1fr 1fr auto;gap:12px;padding:16px;margin-bottom:18px}
+    .toolbar{display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr 1fr auto;gap:12px;padding:16px;margin-bottom:18px}
     .control{display:flex;flex-direction:column;gap:6px}
     .control label{font-size:12px;color:var(--muted)}
     .control input,.control select{height:42px;border-radius:12px;border:1px solid var(--line);background:var(--panel-2);color:var(--text);padding:0 12px;outline:none}
@@ -125,7 +125,10 @@
   </div>
 
   <div class="card toolbar">
-    <div class="control"><label>日期范围</label><select id="period"><option value="day">单日</option><option value="week">周</option><option value="month" selected>月</option></select></div>
+    <div class="control"><label>日期模式</label><select id="dateMode"><option value="preset" selected>快捷范围</option><option value="custom">自定义范围</option></select></div>
+    <div class="control"><label>日期范围</label><select id="period"><option value="today">今日</option><option value="last7">近7天</option><option value="month" selected>本月</option></select></div>
+    <div class="control" id="startDateWrap" style="display:none"><label>开始日期</label><input id="startDate" type="date" /></div>
+    <div class="control" id="endDateWrap" style="display:none"><label>结束日期</label><input id="endDate" type="date" /></div>
     <div class="control"><label>部门</label><select id="department"></select></div>
     <div class="control"><label>项目（多选简化为单项目/全部）</label><select id="project"></select></div>
     <div class="control"><label>坐席姓名</label><select id="agent"></select></div>
@@ -163,7 +166,7 @@
 <script>
 let RAW=[];
 const $=id=>document.getElementById(id);
-const state={period:'month',department:'全部',project:'全部',agent:'全部',search:'',theme:'light'};
+const state={period:'month',dateMode:'preset',startDate:'',endDate:'',department:'全部',project:'全部',agent:'全部',search:'',theme:'light'};
 
 function parseDate(value){
   if(!value) return null;
@@ -172,41 +175,61 @@ function parseDate(value){
   if(parts.length !== 3 || parts.some(n=>Number.isNaN(n))) return null;
   return new Date(parts[0], parts[1]-1, parts[2]);
 }
+function toInputDate(date){
+  return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
+}
+function shiftDate(date, days){
+  const d = new Date(date);
+  d.setHours(0,0,0,0);
+  d.setDate(d.getDate() + days);
+  return d;
+}
 function formatDateKey(date){
   const y = date.getFullYear();
   const m = String(date.getMonth()+1).padStart(2,'0');
   const d = String(date.getDate()).padStart(2,'0');
   return `${y}/${m}/${d}`;
 }
-function getWeekStart(date){
-  const day = date.getDay();
-  const diff = day === 0 ? -6 : 1 - day;
-  const d = new Date(date);
-  d.setHours(0,0,0,0);
-  d.setDate(d.getDate() + diff);
-  return d;
-}
 function getLatestDate(records){
   const dates = records.map(d=>parseDate(d.date)).filter(Boolean).sort((a,b)=>a-b);
   return dates.length ? dates[dates.length-1] : null;
 }
-function matchesPeriod(record, period, anchorDate){
+function getDateRange(period, anchorDate){
+  if(!anchorDate) return {start:null,end:null};
+  const end = new Date(anchorDate);
+  end.setHours(0,0,0,0);
+  if(period === 'today') return {start:end, end};
+  if(period === 'last7') return {start:shiftDate(end, -6), end};
+  if(period === 'month') return {start:new Date(end.getFullYear(), end.getMonth(), 1), end};
+  return {start:null,end:null};
+}
+function matchesPeriod(record, period, anchorDate, customStart, customEnd, dateMode){
   const current = parseDate(record.date);
-  if(!current || !anchorDate) return true;
-  if(period === 'day') return formatDateKey(current) === formatDateKey(anchorDate);
-  if(period === 'week') {
-    return formatDateKey(getWeekStart(current)) === formatDateKey(getWeekStart(anchorDate));
+  if(!current) return false;
+  current.setHours(0,0,0,0);
+  let start = null;
+  let end = null;
+  if(dateMode === 'custom') {
+    start = customStart ? parseDate(customStart.replace(/-/g,'/')) : null;
+    end = customEnd ? parseDate(customEnd.replace(/-/g,'/')) : null;
+  } else {
+    ({start, end} = getDateRange(period, anchorDate));
   }
-  if(period === 'month') {
-    return current.getFullYear() === anchorDate.getFullYear() && current.getMonth() === anchorDate.getMonth();
-  }
+  if(start) start.setHours(0,0,0,0);
+  if(end) end.setHours(0,0,0,0);
+  if(start && current < start) return false;
+  if(end && current > end) return false;
   return true;
 }
 async function init(){
   RAW = await fetch('./data.json').then(r=>r.json());
+  const latest = getLatestDate(RAW);
+  state.startDate = latest ? toInputDate(new Date(latest.getFullYear(), latest.getMonth(), 1)) : '';
+  state.endDate = latest ? toInputDate(latest) : '';
   bindTabs();
   populateFilters();
   bindControls();
+  toggleDateControls();
   bindTheme();
   render();
 }
@@ -227,9 +250,37 @@ function populateFilters(){
 }
 function fillSelect(id, items){ const el=$(id); el.innerHTML=items.map(v=>`<option>${v}</option>`).join(''); }
 function bindControls(){
-  ['period','department','project','agent'].forEach(id=>$(id).onchange=e=>{state[id]=e.target.value; render();});
+  ['dateMode','period','department','project','agent'].forEach(id=>$(id).onchange=e=>{state[id]=e.target.value; toggleDateControls(); render();});
+  $('startDate').onchange=e=>{state.startDate=e.target.value; render();};
+  $('endDate').onchange=e=>{state.endDate=e.target.value; render();};
   $('agentSearch').oninput=e=>{state.search=e.target.value.trim(); render();};
-  $('resetBtn').onclick=()=>{state.period='month';state.department='全部';state.project='全部';state.agent='全部';state.search='';$('period').value='month';$('department').value='全部';$('project').value='全部';$('agent').value='全部';$('agentSearch').value='';render();};
+  $('resetBtn').onclick=()=>{
+    const latest = getLatestDate(RAW);
+    state.dateMode='preset';
+    state.period='month';
+    state.startDate=latest ? toInputDate(new Date(latest.getFullYear(), latest.getMonth(), 1)) : '';
+    state.endDate=latest ? toInputDate(latest) : '';
+    state.department='全部';
+    state.project='全部';
+    state.agent='全部';
+    state.search='';
+    $('dateMode').value='preset';
+    $('period').value='month';
+    $('startDate').value=state.startDate;
+    $('endDate').value=state.endDate;
+    $('department').value='全部';
+    $('project').value='全部';
+    $('agent').value='全部';
+    $('agentSearch').value='';
+    toggleDateControls();
+    render();
+  };
+}
+function toggleDateControls(){
+  const isCustom = state.dateMode === 'custom';
+  $('startDateWrap').style.display = isCustom ? '' : 'none';
+  $('endDateWrap').style.display = isCustom ? '' : 'none';
+  $('period').disabled = isCustom;
 }
 function bindTheme(){
   $('themeToggle').onclick=()=>{
@@ -241,7 +292,7 @@ function bindTheme(){
 }
 function getData(){
   const anchorDate = getLatestDate(RAW);
-  return RAW.filter(d=>matchesPeriod(d, state.period, anchorDate)
+  return RAW.filter(d=>matchesPeriod(d, state.period, anchorDate, state.startDate, state.endDate, state.dateMode)
     && (state.department==='全部'||d.department===state.department)
     && (state.project==='全部'||d.project===state.project)
     && (state.agent==='全部'||d.agent===state.agent)
